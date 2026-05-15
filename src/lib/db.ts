@@ -1,13 +1,14 @@
-import { createCollection } from '@tanstack/db';
+import { createCollection } from '@tanstack/react-db';
 import { electricCollectionOptions } from '@tanstack/electric-db-collection';
+import { QueryClient } from '@tanstack/react-query';
 
-// 1. Initialize the global TanStack Database instance - Using createCollection instead as inferred instance creator
-export const db = createCollection as any; // Temporary fix based on package exports
+// 1. Initialize the central Query engine that TanStack DB uses
+export const queryClient = new QueryClient();
 
-// Base URL for the Electric sync engine shapes (Will be updated in the Uplink phase)
+// Base URL for the Electric sync engine shapes
 const BASE_SHAPE_URL = 'http://localhost:3000/v1/shape';
 
-// 2. Define the Collections mapped directly to the Supabase schema
+// 2. Define all Collections mapped directly to the Supabase schema
 export const animalsCollection = createCollection(
   electricCollectionOptions({
     id: 'animals',
@@ -104,4 +105,50 @@ export const medicationLogsCollection = createCollection(
   })
 );
 
-export const operationalListsCollection = db.create
+export const operationalListsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'operational_lists',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/operational_lists` }
+  })
+);
+
+export const rolePermissionsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'role_permissions',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/role_permissions` }
+  })
+);
+
+export const safetyIncidentsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'safety_incidents',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/safety_incidents` }
+  })
+);
+
+export const tasksCollection = createCollection(
+  electricCollectionOptions({
+    id: 'tasks',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/tasks` }
+  })
+);
+
+export const timesheetsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'timesheets',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/timesheets` }
+  })
+);
+
+export const usersCollection = createCollection(
+  electricCollectionOptions({
+    id: 'users',
+    getKey: (row: any) => row.id,
+    shapeOptions: { url: `${BASE_SHAPE_URL}/users` }
+  })
+);
