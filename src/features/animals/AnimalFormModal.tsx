@@ -1,12 +1,38 @@
 import React, { useState } from 'react';
 import { UploadCloud, Image as ImageIcon, Map, X } from 'lucide-react';
+import { animalService } from '../../services/animalService';
 
+// 1. EXTRACTED HELPERS: Defined outside the render cycle to prevent focus loss & scrolling bugs
+const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
+  <div className="bg-[#0A0B0E] border border-slate-800/80 rounded-2xl p-5 shadow-inner space-y-4">
+    <h3 className="font-black text-emerald-500 uppercase tracking-widest text-[10px] border-b border-slate-800/80 pb-2">{title}</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
+  </div>
+);
+
+const Field = ({ label, field, type = 'text', options, formData, update }: any) => (
+  <div className="space-y-1.5">
+    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+    {type === 'select' ? (
+      <select value={formData[field] || ''} onChange={(e) => update(field, e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50">
+        <option value="">Select...</option>
+        {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    ) : type === 'checkbox' ? (
+      <div className="flex items-center h-10">
+        <input type="checkbox" checked={!!formData[field]} onChange={(e) => update(field, e.target.checked)} className="w-5 h-5 rounded bg-[#0F1117] border-slate-800/80 text-emerald-500 focus:ring-emerald-500" />
+      </div>
+    ) : (
+      <input type={type} value={formData[field] || ''} onChange={(e) => update(field, type === 'number' ? Number(e.target.value) : e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50" />
+    )}
+  </div>
+);
+
+// 2. MAIN COMPONENT
 export function AnimalFormModal({ initialData, onClose }: { initialData?: any, onClose: () => void }) {
-  const [formData, setFormData] = useState(initialData || {});
+  const [formData, setFormData] = useState(initialData || { weight_unit: 'g', entity_type: 'individual' });
   const [isCompressing, setIsCompressing] = useState(false);
 
-  // NATIVE HTML5 IMAGE COMPRESSOR & CROPPER
-  // Shrinks massive phone photos down to a lightweight 800px JPEG
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -17,165 +43,145 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const MAX_DIMENSION = 800;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_DIMENSION) {
-              height *= MAX_DIMENSION / width;
-              width = MAX_DIMENSION;
-            }
-          } else {
-            if (height > MAX_DIMENSION) {
-              width *= MAX_DIMENSION / height;
-              height = MAX_DIMENSION;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          // Output as compressed JPEG (70% quality)
+          let width = img.width, height = img.height;
+          if (width > height) { if (width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } } 
+          else { if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; } }
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
           resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
-        img.onerror = (err) => reject(err);
+        img.onerror = reject;
       };
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'image_url' | 'distribution_map_url') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsCompressing(true);
-    try {
-      const compressedDataUrl = await compressImage(file);
-      setFormData({ ...formData, [field]: compressedDataUrl });
-    } catch (error) {
-      console.error("Image compression failed:", error);
-    } finally {
-      setIsCompressing(false);
-    }
+    try { setFormData({ ...formData, [field]: await compressImage(file) }); } 
+    finally { setIsCompressing(false); }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const update = (field: string, value: any) => setFormData((prev: any) => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("To be submitted to Electric Sync:", formData);
+    await animalService.saveAnimal(formData);
     onClose();
-  };
-
-  const removeImage = (field: 'image_url' | 'distribution_map_url') => {
-    const newData = { ...formData };
-    delete newData[field];
-    setFormData(newData);
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
-      <div className="bg-[#0F1117] border border-slate-800/80 rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl relative custom-scrollbar">
-        <div className="sticky top-0 bg-[#0F1117]/90 backdrop-blur border-b border-slate-800/80 p-5 flex justify-between items-center z-20">
-          <h2 className="text-lg font-black text-white uppercase tracking-widest">
-            {initialData ? 'Edit Clinical Record' : 'Register New Animal'}
-          </h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest">Cancel</button>
+      <div className="bg-[#0F1117] border border-slate-800/80 rounded-3xl w-full max-w-6xl h-[95vh] flex flex-col shadow-2xl relative overflow-hidden">
+        <div className="bg-[#0F1117]/90 backdrop-blur border-b border-slate-800/80 p-5 flex justify-between items-center z-20 shrink-0">
+          <h2 className="text-lg font-black text-white uppercase tracking-widest">{initialData ? 'Edit Full Record' : 'Register New Animal'}</h2>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest">Cancel</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-8">
-          
-          {/* MEDIA UPLOAD SECTION */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Profile Photo */}
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <ImageIcon size={14} /> Profile Photo
-              </label>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} /> Profile Photo</label>
               {formData.image_url ? (
-                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group">
-                  <img src={formData.image_url} alt="Profile" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => removeImage('image_url')} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg backdrop-blur transition-colors">
-                    <X size={16} />
-                  </button>
-                </div>
+                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group"><img src={formData.image_url} alt="Profile" className="w-full h-full object-cover" /><button type="button" onClick={() => update('image_url', null)} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button></div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all">
-                  <UploadCloud size={24} className="text-slate-600 mb-2" />
-                  <span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Photo'}</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'image_url')} disabled={isCompressing} />
-                </label>
+                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-emerald-500/50"><UploadCloud size={24} className="text-slate-600 mb-2" /><span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Photo'}</span><input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'image_url')} disabled={isCompressing} /></label>
               )}
             </div>
-
-            {/* Distribution Map */}
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <Map size={14} /> Distribution Map
-              </label>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Map size={14} /> Distribution Map</label>
               {formData.distribution_map_url ? (
-                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group">
-                  <img src={formData.distribution_map_url} alt="Map" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => removeImage('distribution_map_url')} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg backdrop-blur transition-colors">
-                    <X size={16} />
-                  </button>
-                </div>
+                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group"><img src={formData.distribution_map_url} alt="Map" className="w-full h-full object-cover" /><button type="button" onClick={() => update('distribution_map_url', null)} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button></div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-blue-500/50 hover:bg-blue-500/5 transition-all">
-                  <UploadCloud size={24} className="text-slate-600 mb-2" />
-                  <span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Map'}</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'distribution_map_url')} disabled={isCompressing} />
-                </label>
+                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-blue-500/50"><UploadCloud size={24} className="text-slate-600 mb-2" /><span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Map'}</span><input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'distribution_map_url')} disabled={isCompressing} /></label>
               )}
             </div>
           </div>
 
-          <div className="w-full h-px bg-slate-800/80" />
+          <Section title="Basic Info">
+            <Field label="Entity Type" field="entity_type" type="select" options={['individual', 'group']} formData={formData} update={update} />
+            <Field label="Parent Mob ID" field="parent_mob_id" formData={formData} update={update} />
+            <Field label="Census Count" field="census_count" type="number" formData={formData} update={update} />
+            <Field label="Name" field="name" formData={formData} update={update} />
+            <Field label="Category" field="category" type="select" options={['OWLS', 'RAPTORS', 'MAMMALS', 'EXOTICS']} formData={formData} update={update} />
+            <Field label="Location" field="location" formData={formData} update={update} />
+            <Field label="Display Order" field="display_order" type="number" formData={formData} update={update} />
+            <Field label="Boarding" field="is_boarding" type="checkbox" formData={formData} update={update} />
+            <Field label="Quarantine" field="is_quarantine" type="checkbox" formData={formData} update={update} />
+          </Section>
 
-          {/* STANDARD FIELDS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Section title="Taxonomy & Demographics">
+            <Field label="Species" field="species" formData={formData} update={update} />
+            <Field label="Latin Name" field="latin_name" formData={formData} update={update} />
+            <Field label="Gender" field="gender" type="select" options={['MALE', 'FEMALE', 'UNKNOWN']} formData={formData} update={update} />
+            <Field label="Date of Birth" field="date_of_birth" type="date" formData={formData} update={update} />
+            <Field label="DOB Unknown" field="is_dob_unknown" type="checkbox" formData={formData} update={update} />
+            <Field label="Red List Status" field="red_list_status" type="select" options={['NE', 'DD', 'LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX']} formData={formData} update={update} />
+          </Section>
+
+          <Section title="Identifiers">
+            <Field label="Ring Number" field="ring_number" formData={formData} update={update} />
+            <Field label="Microchip ID" field="microchip_id" formData={formData} update={update} />
+            <Field label="No ID Placed" field="has_no_id" type="checkbox" formData={formData} update={update} />
+          </Section>
+
+          <Section title="Origin & Lineage">
+            <Field label="Origin" field="origin" formData={formData} update={update} />
+            <Field label="Origin Location" field="origin_location" formData={formData} update={update} />
+            <Field label="Acquisition Date" field="acquisition_date" type="date" formData={formData} update={update} />
+            <Field label="Acquisition Type" field="acquisition_type" type="select" options={['BRED', 'PURCHASED', 'DONATED', 'RESCUED']} formData={formData} update={update} />
+            <Field label="Lineage Unknown" field="lineage_unknown" type="checkbox" formData={formData} update={update} />
+            <Field label="Sire ID" field="sire_id" formData={formData} update={update} />
+            <Field label="Dam ID" field="dam_id" formData={formData} update={update} />
+          </Section>
+
+          <Section title="Weight Management">
+            <Field label="Weight Unit" field="weight_unit" type="select" options={['g', 'kg', 'oz', 'lbs']} formData={formData} update={update} />
+            <Field label="Flying Weight" field="flying_weight_g" type="number" formData={formData} update={update} />
+            <Field label="Winter Weight" field="winter_weight_g" type="number" formData={formData} update={update} />
+            <Field label="Average Target" field="average_target_weight" type="number" formData={formData} update={update} />
+          </Section>
+
+          <Section title="Environment Targets">
+            <Field label="Day Temp (°C)" field="target_day_temp_c" type="number" formData={formData} update={update} />
+            <Field label="Night Temp (°C)" field="target_night_temp_c" type="number" formData={formData} update={update} />
+            <Field label="Ambient Only" field="ambient_temp_only" type="checkbox" formData={formData} update={update} />
+            <Field label="Min Humidity (%)" field="target_humidity_min_percent" type="number" formData={formData} update={update} />
+            <Field label="Max Humidity (%)" field="target_humidity_max_percent" type="number" formData={formData} update={update} />
+            <Field label="Water Tipping Temp (°C)" field="water_tipping_temp" type="number" formData={formData} update={update} />
+            <Field label="Misting Frequency" field="misting_frequency" formData={formData} update={update} />
+          </Section>
+
+          <Section title="Safety & Archive">
+            <Field label="Hazard Rating" field="hazard_rating" type="select" options={['LOW', 'MEDIUM', 'HIGH']} formData={formData} update={update} />
+            <Field label="Venomous" field="is_venomous" type="checkbox" formData={formData} update={update} />
+            <Field label="Archived" field="archived" type="checkbox" formData={formData} update={update} />
+            <Field label="Archive Reason" field="archive_reason" formData={formData} update={update} />
+            <Field label="Archive Type" field="archive_type" formData={formData} update={update} />
+          </Section>
+
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Name</label>
-              <input type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" />
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Critical Husbandry Notes</label>
+              <textarea value={formData.critical_husbandry_notes || ''} onChange={e => update('critical_husbandry_notes', e.target.value)} rows={3} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50 resize-none shadow-inner" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Species</label>
-              <input type="text" value={formData.species || ''} onChange={e => setFormData({...formData, species: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" />
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Special Requirements</label>
+              <textarea value={formData.special_requirements || ''} onChange={e => update('special_requirements', e.target.value)} rows={2} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50 resize-none shadow-inner" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</label>
-              <select value={formData.category || 'OWLS'} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50">
-                <option value="OWLS">Owls</option>
-                <option value="RAPTORS">Raptors</option>
-                <option value="MAMMALS">Mammals</option>
-                <option value="EXOTICS">Exotics</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Location</label>
-              <input type="text" value={formData.location || ''} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ring Number</label>
-              <input type="text" value={formData.ring_number || ''} onChange={e => setFormData({...formData, ring_number: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Microchip ID</label>
-              <input type="text" value={formData.microchip_id || ''} onChange={e => setFormData({...formData, microchip_id: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" />
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Description</label>
+              <textarea value={formData.description || ''} onChange={e => update('description', e.target.value)} rows={4} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50 resize-none shadow-inner" />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Critical Husbandry Notes</label>
-            <textarea value={formData.critical_husbandry_notes || ''} onChange={e => setFormData({...formData, critical_husbandry_notes: e.target.value})} rows={3} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50 resize-none" />
-          </div>
-
-          <div className="pt-4 border-t border-slate-800/80 flex justify-end">
-            <button type="submit" className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-              {initialData ? 'Save Changes' : 'Create Animal'}
-            </button>
-          </div>
         </form>
+        <div className="p-5 border-t border-slate-800/80 bg-[#0F1117]/90 backdrop-blur shrink-0 flex justify-end z-20">
+          <button type="submit" onClick={handleSubmit} className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+            {initialData ? 'Save Changes' : 'Register Animal'}
+          </button>
+        </div>
       </div>
     </div>
   );
