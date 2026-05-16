@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { Login } from '../features/auth/Login';
 import { Loader2 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
+import { SyncEngine } from '../components/data/SyncEngine';
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -30,5 +31,10 @@ function RootComponent() {
     return <Login />;
   }
 
-  return <AppLayout />;
+  return (
+    <>
+      <SyncEngine />
+      <AppLayout />
+    </>
+  );
 }

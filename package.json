@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@electric-sql/client": "^1.5.17",
+    "@electric-sql/react": "^1.0.46",
     "@google/genai": "^1.29.0",
     "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/vite": "^4.1.14",
