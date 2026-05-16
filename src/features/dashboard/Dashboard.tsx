@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Heart, AlertCircle, Scale, ClipboardCheck, CheckCircle } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState('ALL');
@@ -26,6 +27,98 @@ export function Dashboard() {
   const filteredAnimals = activeTab === 'ALL' 
     ? animals 
     : animals.filter((a: any) => a.category === activeTab);
+
+  // Helper to render table header
+  const renderTableHeader = () => {
+    if (activeTab === 'OWLS' || activeTab === 'RAPTORS') {
+      return (
+        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Ring #</th><th className="px-6 py-5">Weight</th><th className="px-6 py-5">Last Feed</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Location</th>
+        </tr>
+      );
+    }
+    if (activeTab === 'MAMMALS') {
+      return (
+        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Microchip</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Location</th>
+        </tr>
+      );
+    }
+    if (activeTab === 'EXOTICS') {
+      return (
+        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Next Feed</th><th className="px-6 py-5">Location</th>
+        </tr>
+      );
+    }
+    return (
+      <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+        <th className="px-6 py-5">Name</th><th className="px-6 py-5">Category</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Location</th>
+      </tr>
+    );
+  };
+
+  // Helper to render dynamic row cells
+  const renderRowCells = (animal: any) => {
+    const emptyNode = <span className="text-slate-700">--</span>;
+
+    // The clickable name cell
+    const nameCell = (
+      <td className="px-6 py-4 text-xs font-bold">
+        <Link 
+          to="/animals/$id" 
+          params={{ id: animal.id }}
+          className="text-emerald-400 hover:text-emerald-300 transition-colors underline decoration-emerald-500/30 underline-offset-4"
+        >
+          {animal.name || 'Unnamed'}
+        </Link>
+      </td>
+    );
+
+    if (activeTab === 'OWLS' || activeTab === 'RAPTORS') {
+      return (
+        <>
+          {nameCell}
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.species || 'Unknown'}</td>
+          <td className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{animal.ring_number || emptyNode}</td>
+          <td className="px-6 py-4 text-xs font-bold text-amber-500">{animal.todays_weight ? `${animal.todays_weight}g` : emptyNode}</td>
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.last_feed || emptyNode}</td>
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.todays_feed || emptyNode}</td>
+          <td className="px-6 py-4"><span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg uppercase tracking-widest">{animal.location || 'Unknown'}</span></td>
+        </>
+      );
+    }
+    if (activeTab === 'MAMMALS') {
+      return (
+        <>
+          {nameCell}
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.species || 'Unknown'}</td>
+          <td className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{animal.microchip_id || emptyNode}</td>
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.todays_feed || emptyNode}</td>
+          <td className="px-6 py-4"><span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg uppercase tracking-widest">{animal.location || 'Unknown'}</span></td>
+        </>
+      );
+    }
+    if (activeTab === 'EXOTICS') {
+      return (
+        <>
+          {nameCell}
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.species || 'Unknown'}</td>
+          <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.todays_feed || emptyNode}</td>
+          <td className="px-6 py-4 text-[10px] font-black text-amber-500/80 uppercase tracking-widest">{animal.next_feed || emptyNode}</td>
+          <td className="px-6 py-4"><span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg uppercase tracking-widest">{animal.location || 'Unknown'}</span></td>
+        </>
+      );
+    }
+    return (
+      <>
+        {nameCell}
+        <td className="px-6 py-4 text-[10px] font-black text-blue-400 uppercase tracking-widest">{animal.category || emptyNode}</td>
+        <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.species || 'Unknown'}</td>
+        <td className="px-6 py-4"><span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg uppercase tracking-widest">{animal.location || 'Unknown'}</span></td>
+      </>
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto font-sans">
@@ -102,17 +195,13 @@ export function Dashboard() {
       <div className="bg-[#0F1117] rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden relative">
         <div className="w-full overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
-              <tr>
-                <th className="px-6 py-5">Name</th>
-                <th className="px-6 py-5">Species</th>
-                <th className="px-6 py-5">Location</th>
-              </tr>
+            <thead className="w-full">
+              {renderTableHeader()}
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {filteredAnimals.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-16 text-center">
+                  <td colSpan={5} className="px-6 py-16 text-center">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0A0B0E] border border-slate-800/80 mb-4 shadow-inner">
                       <Scale size={24} className="text-slate-600" />
                     </div>
@@ -123,13 +212,7 @@ export function Dashboard() {
               ) : (
                 filteredAnimals.map((animal: any) => (
                   <tr key={animal.id} className="hover:bg-[#0A0B0E] transition-colors group">
-                    <td className="px-6 py-4 text-xs font-bold text-slate-200">{animal.name || 'Unnamed'}</td>
-                    <td className="px-6 py-4 text-xs font-bold text-slate-500">{animal.species || 'Unknown'}</td>
-                    <td className="px-6 py-4">
-                      <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg uppercase tracking-widest">
-                        {animal.location || 'Unknown'}
-                      </span>
-                    </td>
+                    {renderRowCells(animal)}
                   </tr>
                 ))
               )}
