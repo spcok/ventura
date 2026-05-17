@@ -1,68 +1,104 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, AlertCircle, Scale, ClipboardCheck, CheckCircle } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
+import { Heart, AlertCircle, Scale, ClipboardCheck, CheckCircle, Plus, Calendar, ArrowDownAZ, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AnimalFormModal } from '../animals/AnimalFormModal';
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState('ALL');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [sortMode, setSortMode] = useState<'NAME_ASC' | 'NAME_DESC' | 'CUSTOM'>('NAME_ASC');
 
-  // LOCAL REACTIVE QUERY: Configured for Electric Sync caching
   const { data: rawAnimals = [] } = useQuery({ 
     queryKey: ['animals'],
     queryFn: () => [], 
     staleTime: Infinity 
   });
   
-  // LOCAL REACTIVE QUERY: Configured for Electric Sync caching
   const { data: rawTasks = [] } = useQuery({ 
     queryKey: ['tasks'],
     queryFn: () => [],
     staleTime: Infinity
   });
 
-  // In-memory filter to replace SQL WHERE clauses
-  const animals = rawAnimals.filter((a: any) => !a.is_deleted).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+  // Date Manipulation Helpers
+  const adjustDate = (days: number) => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() + days);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  const setToday = () => {
+    setSelectedDate(new Date().toISOString().split('T')[0]);
+  };
+
+  // 1. Filter out deleted
+  const activeAnimals = rawAnimals.filter((a: any) => !a.is_deleted);
+  
+  // 2. Apply Sorting Engine
+  const sortedAnimals = [...activeAnimals].sort((a: any, b: any) => {
+    if (sortMode === 'NAME_ASC') return (a.name || '').localeCompare(b.name || '');
+    if (sortMode === 'NAME_DESC') return (b.name || '').localeCompare(a.name || '');
+    if (sortMode === 'CUSTOM') return (a.display_order ?? 999) - (b.display_order ?? 999);
+    return 0;
+  });
+
   const tasks = rawTasks.filter((t: any) => t.status === 'PENDING' && !t.is_deleted);
 
+  // 3. Apply Category Filter
   const filteredAnimals = activeTab === 'ALL' 
-    ? animals 
-    : animals.filter((a: any) => a.category === activeTab);
+    ? sortedAnimals 
+    : sortedAnimals.filter((a: any) => (a.category || '').toUpperCase() === activeTab);
 
-  // Helper to render table header
-  const renderTableHeader = () => {
+  const renderHeaders = () => {
     if (activeTab === 'OWLS' || activeTab === 'RAPTORS') {
       return (
-        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
-          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Ring #</th><th className="px-6 py-5">Weight</th><th className="px-6 py-5">Last Feed</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Location</th>
-        </tr>
+        <>
+          <th className="px-6 py-5">Name</th>
+          <th className="px-6 py-5">Species</th>
+          <th className="px-6 py-5">Ring Number</th>
+          <th className="px-6 py-5">Today's Wgt</th>
+          <th className="px-6 py-5">Last Feed</th>
+          <th className="px-6 py-5">Today's Feed</th>
+          <th className="px-6 py-5">Location</th>
+        </>
       );
     }
     if (activeTab === 'MAMMALS') {
       return (
-        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
-          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Microchip</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Location</th>
-        </tr>
+        <>
+          <th className="px-6 py-5">Name</th>
+          <th className="px-6 py-5">Species</th>
+          <th className="px-6 py-5">Microchip</th>
+          <th className="px-6 py-5">Today's Feed</th>
+          <th className="px-6 py-5">Location</th>
+        </>
       );
     }
     if (activeTab === 'EXOTICS') {
       return (
-        <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
-          <th className="px-6 py-5">Name</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Feed</th><th className="px-6 py-5">Next Feed</th><th className="px-6 py-5">Location</th>
-        </tr>
+        <>
+          <th className="px-6 py-5">Name</th>
+          <th className="px-6 py-5">Species</th>
+          <th className="px-6 py-5">Today's Feed</th>
+          <th className="px-6 py-5">Next Sched. Feed</th>
+          <th className="px-6 py-5">Location</th>
+        </>
       );
     }
     return (
-      <tr className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
-        <th className="px-6 py-5">Name</th><th className="px-6 py-5">Category</th><th className="px-6 py-5">Species</th><th className="px-6 py-5">Location</th>
-      </tr>
+      <>
+        <th className="px-6 py-5">Name</th>
+        <th className="px-6 py-5">Category</th>
+        <th className="px-6 py-5">Species</th>
+        <th className="px-6 py-5">Location</th>
+      </>
     );
   };
 
-  // Helper to render dynamic row cells
   const renderRowCells = (animal: any) => {
     const emptyNode = <span className="text-slate-700">--</span>;
-
-    // The clickable name cell
     const nameCell = (
       <td className="px-6 py-4 text-xs font-bold">
         <Link 
@@ -174,6 +210,56 @@ export function Dashboard() {
           </div>
       </div>
 
+      {/* Action Bar (Controls) */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0F1117] border border-slate-800/80 p-3 rounded-2xl shadow-inner">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          
+          {/* Quick Date Controls */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => adjustDate(-1)} className="p-2 bg-[#0A0B0E] border border-slate-800/80 rounded-xl text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors shadow-inner" title="Previous Day">
+              <ChevronLeft size={16} />
+            </button>
+            <button onClick={setToday} className="px-3 py-2 bg-[#0A0B0E] border border-slate-800/80 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors shadow-inner">
+              Today
+            </button>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full sm:w-36 bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-9 pr-2 py-2 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+            <button onClick={() => adjustDate(1)} className="p-2 bg-[#0A0B0E] border border-slate-800/80 rounded-xl text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors shadow-inner" title="Next Day">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <div className="hidden sm:block w-px h-6 bg-slate-800/80" />
+
+          <div className="relative flex-1 sm:flex-none">
+            <ArrowDownAZ className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+            <select 
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as any)}
+              className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-9 pr-8 py-2 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50 appearance-none"
+            >
+              <option value="NAME_ASC">Name (A-Z)</option>
+              <option value="NAME_DESC">Name (Z-A)</option>
+              <option value="CUSTOM">Custom Order</option>
+            </select>
+          </div>
+        </div>
+        
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+        >
+          <Plus size={16} /> Add Animal
+        </button>
+      </div>
+
       {/* Tabs */}
       <div className="flex overflow-x-auto scrollbar-hide bg-[#0F1117] border border-slate-800/80 p-1.5 rounded-2xl gap-1 shadow-inner">
         {['ALL', 'OWLS', 'RAPTORS', 'MAMMALS', 'EXOTICS', 'ARCHIVED'].map(cat => (
@@ -195,18 +281,20 @@ export function Dashboard() {
       <div className="bg-[#0F1117] rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden relative">
         <div className="w-full overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="w-full">
-              {renderTableHeader()}
+            <thead className="bg-[#0A0B0E] border-b border-slate-800/80 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+              <tr>
+                {renderHeaders()}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {filteredAnimals.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-16 text-center">
+                  <td colSpan={7} className="px-6 py-16 text-center">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0A0B0E] border border-slate-800/80 mb-4 shadow-inner">
                       <Scale size={24} className="text-slate-600" />
                     </div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-widest">Local Vault Empty</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-2">Awaiting downstream sync from Supabase.</p>
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest">No Records Found</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-2">No animals match this category filter.</p>
                   </td>
                 </tr>
               ) : (
@@ -220,6 +308,11 @@ export function Dashboard() {
           </table>
         </div>
       </div>
+
+      {/* Modals */}
+      {isAddModalOpen && (
+        <AnimalFormModal onClose={() => setIsAddModalOpen(false)} />
+      )}
     </div>
   );
 }
