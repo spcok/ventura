@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { 
   LayoutDashboard, PawPrint, Stethoscope, ClipboardList, ShieldAlert,
-  CalendarDays, Apple, Syringe, Activity, FirstAid, AlertTriangle, 
+  CalendarDays, Apple, Syringe, Activity, BriefcaseMedical, AlertTriangle, 
   Wrench, Users, Clock, CalendarHeart, FileBadge, FileWarning, 
   BarChart3, Settings, HelpCircle, ChevronDown, ChevronRight, HeartPulse
 } from 'lucide-react';
@@ -30,7 +30,7 @@ const navGroups = [
     title: 'Safety and Compliance',
     icon: AlertTriangle,
     items: [
-      { name: 'First Aid', to: '/safety/first-aid', icon: FirstAid },
+      { name: 'First Aid', to: '/safety/first-aid', icon: BriefcaseMedical },
       { name: 'Incidents', to: '/safety/incidents', icon: AlertTriangle },
       { name: 'Safety Drills', to: '/safety/drills', icon: Activity },
       { name: 'Maintenance', to: '/safety/maintenance', icon: Wrench },
