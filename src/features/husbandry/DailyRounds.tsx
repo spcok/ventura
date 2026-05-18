@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-    ClipboardCheck, Check, X, Droplets, Lock, 
-    Heart, AlertTriangle, Loader2 
+    Check, X, Droplets, Lock, Heart, AlertTriangle, Loader2, ClipboardCheck
 } from 'lucide-react';
 import { dailyRoundService } from '../../services/dailyRoundService';
 import { Animal, DailyRound } from '../../types/schema';
@@ -14,11 +13,9 @@ export default function DailyRounds() {
   const [viewDate, setViewDate] = useState(new Date().toISOString().split('T')[0]);
   const [roundType, setRoundType] = useState<'Morning' | 'Evening'>('Morning');
   
-  // Restore the Active Tab State
-  const [activeTab, setActiveTab] = useState<string>('OWLS');
+  const [activeCategory, setActiveCategory] = useState<string>('OWLS');
   const categories = ['OWLS', 'RAPTORS', 'MAMMALS', 'EXOTICS'];
   
-  // pendingChecks tracks individual properties: is_alive, water_checked, locks_secured
   const [pendingChecks, setPendingChecks] = useState<Record<string, Partial<DailyRound>>>({});
   const [reportModal, setReportModal] = useState<{ open: boolean, animalId: string | null, type: ReportType | null }>({ open: false, animalId: null, type: null });
   const [issueText, setIssueText] = useState('');
@@ -32,15 +29,10 @@ export default function DailyRounds() {
     }
   });
 
-  // 2. Filter by Tab, then Group by Location
-  const filteredAnimals = animals.filter(a => (a.category || '').toUpperCase() === activeTab);
-  
-  const animalsByLocation = filteredAnimals.reduce((acc, animal) => {
-    const loc = animal.location || 'Unassigned Section';
-    if (!acc[loc]) acc[loc] = [];
-    acc[loc].push(animal);
-    return acc;
-  }, {} as Record<string, Animal[]>);
+  // 2. Filter by Tab (No Location Grouping - Unified with Daily Logs)
+  const activeAnimals = animals
+    .filter(a => (a.category || '').toUpperCase() === activeCategory)
+    .sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
 
   // 3. Tri-State Logic per ZLA Button
   const toggleSpecific = (animal: Animal, type: ReportType) => {
@@ -53,13 +45,10 @@ export default function DailyRounds() {
     const val = current[key];
 
     if (val === undefined) {
-        // Tap 1: YES (Green)
         setPendingChecks(prev => ({ ...prev, [animal.id!]: { ...prev[animal.id!], [key]: true } }));
     } else if (val === true) {
-        // Tap 2: NO (Trigger Modal)
         setReportModal({ open: true, animalId: animal.id!, type });
     } else {
-        // Tap 3: Reset to unchecked
         setPendingChecks(prev => {
             const next = { ...prev[animal.id!] };
             delete next[key];
@@ -106,157 +95,164 @@ export default function DailyRounds() {
     }));
     await dailyRoundService.bulkSaveRound(roundsToSave as DailyRound[]);
     setPendingChecks({});
-    alert(`Successfully signed off ${roundsToSave.length} records for ${roundType} shift.`);
   };
 
-  if (isLoading) return <div className="flex justify-center items-center min-h-screen"><Loader2 className="animate-spin text-emerald-500 w-12 h-12" /></div>;
+  const renderButton = (animal: Animal, type: ReportType) => {
+    const status = pendingChecks[animal.id!];
+    let key: keyof Partial<DailyRound> = 'is_alive';
+    if (type === 'WATER') key = 'water_checked';
+    if (type === 'SECURE') key = 'locks_secured';
+
+    const val = status?.[key];
+    
+    let Icon = Heart;
+    let text = 'PENDING';
+    let styleClass = 'bg-[#0A0B0E] text-slate-600 border-slate-800/80 hover:bg-slate-800/50 hover:text-emerald-400 hover:border-emerald-500/50';
+
+    if (val === true) {
+        Icon = Check;
+        text = 'OK';
+        styleClass = 'bg-emerald-600/10 text-emerald-400 border-emerald-500/20 shadow-inner';
+    } else if (val === false) {
+        Icon = type === 'HEALTH' ? AlertTriangle : X;
+        text = 'ISSUE';
+        styleClass = 'bg-rose-600/10 text-rose-400 border-rose-500/20 shadow-inner';
+    } else {
+        if (type === 'WATER') Icon = Droplets;
+        if (type === 'SECURE') Icon = Lock;
+    }
+
+    return (
+        <button 
+            onClick={() => toggleSpecific(animal, type)}
+            className={`w-full py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 border ${styleClass}`}
+        >
+            <Icon size={14} className={val === undefined ? "opacity-50" : ""} />
+            {text}
+        </button>
+    );
+  };
 
   return (
-    <div className="bg-[#0F1117] min-h-screen text-white p-4 sm:p-6 font-sans pb-32">
-      <div className="max-w-5xl mx-auto">
-          {/* Header & AM/PM Toggle */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <h1 className="text-xl font-black uppercase tracking-widest text-white flex items-center gap-3">
-                <ClipboardCheck className="text-emerald-500" /> Daily Rounds
-            </h1>
-            
-            <div className="flex bg-[#0A0B0E] p-1.5 rounded-xl border border-slate-800">
-                <button 
-                    onClick={() => setRoundType('Morning')}
-                    className={`px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${roundType === 'Morning' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                >
-                    AM Shift
-                </button>
-                <button 
-                    onClick={() => setRoundType('Evening')}
-                    className={`px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${roundType === 'Evening' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                >
-                    PM Shift
-                </button>
-            </div>
-          </div>
-
-          {/* Restored Category Tabs */}
-          <div className="flex overflow-x-auto scrollbar-hide bg-[#0A0B0E] p-1.5 rounded-xl gap-1 mb-8 border border-slate-800">
-            {categories.map((tab) => (
-                <button 
-                    key={tab} 
-                    onClick={() => setActiveTab(tab)} 
-                    className={`flex-1 min-w-[100px] py-2.5 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === tab ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-slate-800/50'}`}
-                >
-                    {tab}
-                </button>
-            ))}
-          </div>
-
-          {/* Render Lists grouped by Section */}
-          <div className="space-y-8">
-            {Object.entries(animalsByLocation).sort().map(([location, sectionAnimals]) => (
-                <div key={location} className="space-y-3">
-                    {/* Section Header */}
-                    <div className="flex items-center gap-3 mb-2 px-1">
-                        <h2 className="text-xs font-black text-emerald-500 uppercase tracking-widest">{location}</h2>
-                        <div className="h-px bg-slate-800/80 flex-1"></div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{sectionAnimals.length} Animals</span>
-                    </div>
-
-                    {/* Animals in Section */}
-                    {sectionAnimals.map((animal) => {
-                        const status = pendingChecks[animal.id!];
-                        return (
-                            <div key={animal.id} className={`bg-[#0A0B0E] border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between transition-all ${status && (status.is_alive !== undefined || status.water_checked !== undefined || status.locks_secured !== undefined) ? 'border-emerald-500/30' : 'border-slate-800'}`}>
-                                <div className="flex items-center gap-4 mb-4 md:mb-0">
-                                    <div className="w-12 h-12 rounded-xl bg-slate-800 overflow-hidden shrink-0 border border-slate-700/50">
-                                        {animal.image_url ? <img src={animal.image_url} className="w-full h-full object-cover" alt={animal.name || 'animal'} /> : <div className="w-full h-full flex items-center justify-center text-slate-600"><ClipboardCheck size={20} /></div>}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-black text-sm uppercase tracking-widest text-white">{animal.name}</h3>
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{animal.species}</p>
-                                    </div>
-                                </div>
-                                
-                                {/* ZLA Compliant Buttons */}
-                                <div className="flex gap-2">
-                                    {/* Health Button */}
-                                    <button onClick={() => toggleSpecific(animal, 'HEALTH')}
-                                        className={`flex flex-col items-center justify-center p-2 rounded-xl border w-16 h-14 transition-all ${
-                                            status?.is_alive === true ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' :
-                                            status?.is_alive === false ? 'border-rose-500 bg-rose-500/10 text-rose-500' :
-                                            'border-slate-800 text-slate-500 hover:border-slate-600'
-                                        }`}>
-                                        {status?.is_alive === true ? <Check size={18} /> : status?.is_alive === false ? <AlertTriangle size={18} /> : <Heart size={18} />}
-                                        <span className="text-[8px] font-black uppercase mt-1 tracking-widest">Health</span>
-                                    </button>
-
-                                    {/* Water Button */}
-                                    <button onClick={() => toggleSpecific(animal, 'WATER')}
-                                        className={`flex flex-col items-center justify-center p-2 rounded-xl border w-16 h-14 transition-all ${
-                                            status?.water_checked === true ? 'border-blue-500 bg-blue-500/10 text-blue-500' :
-                                            status?.water_checked === false ? 'border-rose-500 bg-rose-500/10 text-rose-500' :
-                                            'border-slate-800 text-slate-500 hover:border-slate-600'
-                                        }`}>
-                                        {status?.water_checked === true ? <Check size={18} /> : status?.water_checked === false ? <X size={18} /> : <Droplets size={18} />}
-                                        <span className="text-[8px] font-black uppercase mt-1 tracking-widest">Water</span>
-                                    </button>
-
-                                    {/* Secure Button */}
-                                    <button onClick={() => toggleSpecific(animal, 'SECURE')}
-                                        className={`flex flex-col items-center justify-center p-2 rounded-xl border w-16 h-14 transition-all ${
-                                            status?.locks_secured === true ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' :
-                                            status?.locks_secured === false ? 'border-rose-500 bg-rose-500/10 text-rose-500' :
-                                            'border-slate-800 text-slate-500 hover:border-slate-600'
-                                        }`}>
-                                        {status?.locks_secured === true ? <Check size={18} /> : status?.locks_secured === false ? <X size={18} /> : <Lock size={18} />}
-                                        <span className="text-[8px] font-black uppercase mt-1 tracking-widest">Secure</span>
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            ))}
-          </div>
+    <div className="space-y-6 max-w-[1600px] mx-auto font-sans pb-12">
+      {/* Header Unification (No Icon, Tight Typography) */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-white tracking-tight uppercase">Daily Rounds</h1>
+          <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">ZLA Compliance & Field Verification</p>
+        </div>
       </div>
 
-      {/* Fixed Footer for ZLA Verification */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#0F1117]/90 backdrop-blur border-t border-slate-800 flex justify-center z-40">
-         <button 
+      {/* Unified Control Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0F1117] border border-slate-800/80 p-3 rounded-2xl shadow-inner">
+        <div className="flex items-center gap-2 w-full sm:w-auto bg-[#0A0B0E] p-1.5 rounded-xl border border-slate-800/80 shadow-inner">
+            <button 
+                onClick={() => setRoundType('Morning')}
+                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${roundType === 'Morning' ? 'bg-amber-600/20 text-amber-500 border border-amber-500/30 shadow-sm' : 'text-slate-500 hover:text-white border border-transparent'}`}
+            >
+                AM Shift
+            </button>
+            <button 
+                onClick={() => setRoundType('Evening')}
+                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${roundType === 'Evening' ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shadow-sm' : 'text-slate-500 hover:text-white border border-transparent'}`}
+            >
+                PM Shift
+            </button>
+        </div>
+        
+        <button 
             onClick={handleSignOff} 
-            disabled={Object.keys(pendingChecks).length === 0} 
-            className="w-full max-w-5xl bg-emerald-600 py-4 rounded-xl font-black text-xs uppercase tracking-widest text-white hover:bg-emerald-500 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)] flex justify-center items-center gap-2"
-         >
-            <ClipboardCheck size={18} />
-            Submit ZLA Verification Log ({Object.keys(pendingChecks).length} Records)
-         </button>
+            disabled={Object.keys(pendingChecks).length === 0}
+            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-[10px] uppercase tracking-widest font-black transition-all ${Object.keys(pendingChecks).length > 0 ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-inner hover:bg-emerald-600 hover:text-white' : 'bg-[#0A0B0E] border border-slate-800/80 text-slate-600 cursor-not-allowed'}`}
+        >
+          <ClipboardCheck size={14} /> Submit {Object.keys(pendingChecks).length} Records
+        </button>
       </div>
 
-      {/* Issue Reporting Modal */}
+      {/* Unified Category Tabs */}
+      <div className="flex overflow-x-auto scrollbar-hide bg-[#0F1117] border border-slate-800/80 p-1.5 rounded-2xl gap-1 shadow-inner">
+        {categories.map(cat => (
+          <button 
+            key={cat} 
+            onClick={() => setActiveCategory(cat)} 
+            className={`flex-1 min-w-[100px] py-2.5 px-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeCategory === cat ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-sm' : 'text-slate-500 hover:text-slate-300 hover:bg-[#0A0B0E]'}`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Unified Table Layout */}
+      <div className="bg-[#0F1117] rounded-3xl border border-slate-800/80 shadow-2xl overflow-hidden">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-sm min-w-[700px]">
+            <thead className="bg-[#0A0B0E] border-b border-slate-800/80">
+              <tr>
+                <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest w-2/5">Animal</th>
+                <th className="px-4 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest w-1/5">Health</th>
+                <th className="px-4 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest w-1/5">Water</th>
+                <th className="px-4 py-4 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest w-1/5">Secure</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {isLoading ? (
+                <tr><td colSpan={4} className="px-6 py-12 text-center text-xs font-black text-slate-500 uppercase tracking-widest animate-pulse">Accessing Vault...</td></tr>
+              ) : activeAnimals.length === 0 ? (
+                <tr><td colSpan={4} className="px-6 py-12 text-center text-xs font-black text-slate-500 uppercase tracking-widest">No animals in this section</td></tr>
+              ) : (
+                activeAnimals.map((animal) => (
+                  <tr key={animal.id} className="hover:bg-[#0A0B0E] transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-[#0F1117] border border-slate-800/80 shadow-inner flex items-center justify-center overflow-hidden shrink-0">
+                          {animal.image_url ? <img src={animal.image_url} className="w-full h-full object-cover" /> : <span className="text-xs font-black text-slate-600">{animal.name?.charAt(0) || '?'}</span>}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">{animal.name || 'Unnamed'}</p>
+                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-0.5">{animal.species}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">{renderButton(animal, 'HEALTH')}</td>
+                    <td className="px-4 py-3 text-center">{renderButton(animal, 'WATER')}</td>
+                    <td className="px-4 py-3 text-center">{renderButton(animal, 'SECURE')}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Unified Issue Reporting Modal */}
       {reportModal.open && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-[#0F1117] border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl">
-                <h2 className="text-sm font-black text-white uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <AlertTriangle className="text-rose-500" size={18} />
+            <div className="bg-[#0F1117] border border-slate-800/80 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+                <h2 className="text-xl font-black text-white uppercase tracking-tight mb-1 flex items-center gap-2">
+                    <AlertTriangle className="text-rose-500" size={24} />
                     Report {reportModal.type} Issue
                 </h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mb-4">This note will be attached to the formal ZLA log.</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mb-6 tracking-widest">This note will be attached to the formal ZLA log.</p>
+                
                 <textarea 
                     autoFocus
                     value={issueText} 
                     onChange={(e) => setIssueText(e.target.value)} 
-                    className="w-full bg-[#0A0B0E] border border-slate-800 rounded-xl p-3 text-sm font-medium text-white mb-4 focus:outline-none focus:border-rose-500/50 resize-none h-32"
+                    className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl p-4 text-sm font-medium text-white mb-6 focus:outline-none focus:border-rose-500/50 resize-none h-32 shadow-inner"
                     placeholder="Provide required observation details..."
                 />
-                <div className="flex gap-2">
+                
+                <div className="flex gap-3">
                     <button 
                         onClick={() => setReportModal({ open: false, animalId: null, type: null })} 
-                        className="flex-1 bg-[#0A0B0E] border border-slate-800 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-white"
+                        className="flex-1 bg-[#13161E] border border-slate-800/80 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
                     >
                         Cancel
                     </button>
                     <button 
                         onClick={confirmIssue} 
                         disabled={!issueText}
-                        className="flex-1 bg-rose-600 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 hover:bg-rose-500"
+                        className="flex-1 bg-rose-600/20 text-rose-400 border border-rose-500/30 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 hover:bg-rose-600 hover:text-white transition-all shadow-inner"
                     >
                         Confirm Log
                     </button>
