@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { UploadCloud, Image as ImageIcon, Map, X } from 'lucide-react';
 import { animalService } from '../../services/animalService';
 
-// 1. EXTRACTED HELPERS: Defined outside the render cycle to prevent focus loss & scrolling bugs
+// 1. EXTRACTED HELPERS
 const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
   <div className="bg-[#0A0B0E] border border-slate-800/80 rounded-2xl p-5 shadow-inner space-y-4">
     <h3 className="font-black text-emerald-500 uppercase tracking-widest text-[10px] border-b border-slate-800/80 pb-2">{title}</h3>
@@ -10,11 +10,14 @@ const Section = ({ title, children }: { title: string, children: React.ReactNode
   </div>
 );
 
-const Field = ({ label, field, type = 'text', options, formData, update }: any) => (
+// Added "required" prop and native HTML5 validation
+const Field = ({ label, field, type = 'text', options, formData, update, required }: any) => (
   <div className="space-y-1.5">
-    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+      {label} {required && <span className="text-rose-500 text-xs">*</span>}
+    </label>
     {type === 'select' ? (
-      <select value={formData[field] || ''} onChange={(e) => update(field, e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50">
+      <select required={required} value={formData[field] || ''} onChange={(e) => update(field, e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50">
         <option value="">Select...</option>
         {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -23,14 +26,20 @@ const Field = ({ label, field, type = 'text', options, formData, update }: any) 
         <input type="checkbox" checked={!!formData[field]} onChange={(e) => update(field, e.target.checked)} className="w-5 h-5 rounded bg-[#0F1117] border-slate-800/80 text-emerald-500 focus:ring-emerald-500" />
       </div>
     ) : (
-      <input type={type} value={formData[field] || ''} onChange={(e) => update(field, type === 'number' ? Number(e.target.value) : e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50" />
+      <input required={required} type={type} value={formData[field] || ''} onChange={(e) => update(field, type === 'number' ? Number(e.target.value) : e.target.value)} className="w-full bg-[#0F1117] border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-emerald-500/50" />
     )}
   </div>
 );
 
 // 2. MAIN COMPONENT
 export function AnimalFormModal({ initialData, onClose }: { initialData?: any, onClose: () => void }) {
-  const [formData, setFormData] = useState(initialData || { weight_unit: 'g', entity_type: 'individual' });
+  // Added strict smart defaults for new records
+  const [formData, setFormData] = useState(initialData || { 
+    weight_unit: 'g', 
+    entity_type: 'individual',
+    census_count: 1,
+    red_list_status: 'NE'
+  });
   const [isCompressing, setIsCompressing] = useState(false);
 
   const compressImage = (file: File): Promise<string> => {
@@ -79,7 +88,7 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest">Cancel</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+        <form id="animal-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} /> Profile Photo</label>
@@ -100,24 +109,23 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
           </div>
 
           <Section title="Basic Info">
-            <Field label="Entity Type" field="entity_type" type="select" options={['individual', 'group']} formData={formData} update={update} />
+            <Field label="Entity Type" field="entity_type" type="select" options={['individual', 'group']} formData={formData} update={update} required />
             <Field label="Parent Mob ID" field="parent_mob_id" formData={formData} update={update} />
-            <Field label="Census Count" field="census_count" type="number" formData={formData} update={update} />
-            <Field label="Name" field="name" formData={formData} update={update} />
-            <Field label="Category" field="category" type="select" options={['OWLS', 'RAPTORS', 'MAMMALS', 'EXOTICS']} formData={formData} update={update} />
+            <Field label="Census Count" field="census_count" type="number" formData={formData} update={update} required />
+            <Field label="Name" field="name" formData={formData} update={update} required />
+            <Field label="Category" field="category" type="select" options={['OWLS', 'RAPTORS', 'MAMMALS', 'EXOTICS']} formData={formData} update={update} required />
             <Field label="Location" field="location" formData={formData} update={update} />
-            <Field label="Display Order" field="display_order" type="number" formData={formData} update={update} />
             <Field label="Boarding" field="is_boarding" type="checkbox" formData={formData} update={update} />
             <Field label="Quarantine" field="is_quarantine" type="checkbox" formData={formData} update={update} />
           </Section>
 
           <Section title="Taxonomy & Demographics">
-            <Field label="Species" field="species" formData={formData} update={update} />
+            <Field label="Species" field="species" formData={formData} update={update} required />
             <Field label="Latin Name" field="latin_name" formData={formData} update={update} />
             <Field label="Gender" field="gender" type="select" options={['MALE', 'FEMALE', 'UNKNOWN']} formData={formData} update={update} />
             <Field label="Date of Birth" field="date_of_birth" type="date" formData={formData} update={update} />
             <Field label="DOB Unknown" field="is_dob_unknown" type="checkbox" formData={formData} update={update} />
-            <Field label="Red List Status" field="red_list_status" type="select" options={['NE', 'DD', 'LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX']} formData={formData} update={update} />
+            <Field label="Red List Status" field="red_list_status" type="select" options={['NE', 'DD', 'LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX']} formData={formData} update={update} required />
           </Section>
 
           <Section title="Identifiers">
@@ -137,7 +145,7 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
           </Section>
 
           <Section title="Weight Management">
-            <Field label="Weight Unit" field="weight_unit" type="select" options={['g', 'kg', 'oz', 'lbs']} formData={formData} update={update} />
+            <Field label="Weight Unit" field="weight_unit" type="select" options={['g', 'kg', 'oz', 'lbs']} formData={formData} update={update} required />
             <Field label="Flying Weight" field="flying_weight_g" type="number" formData={formData} update={update} />
             <Field label="Winter Weight" field="winter_weight_g" type="number" formData={formData} update={update} />
             <Field label="Average Target" field="average_target_weight" type="number" formData={formData} update={update} />
@@ -178,7 +186,7 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
 
         </form>
         <div className="p-5 border-t border-slate-800/80 bg-[#0F1117]/90 backdrop-blur shrink-0 flex justify-end z-20">
-          <button type="submit" onClick={handleSubmit} className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+          <button type="submit" form="animal-form" className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
             {initialData ? 'Save Changes' : 'Register Animal'}
           </button>
         </div>

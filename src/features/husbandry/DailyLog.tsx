@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, Calendar, ChevronLeft, ChevronRight, ClipboardList, Plus, Check } from 'lucide-react';
+import { Users, Calendar, ChevronLeft, ChevronRight, Plus, Check } from 'lucide-react';
 import AddEntryModal from './AddEntryModal';
 
 export default function DailyLog() {
@@ -54,14 +54,36 @@ export default function DailyLog() {
   };
 
   const renderCell = (animal: any, type: string) => {
-    // Only check logs for the specific date
-    const log = todaysLogs.find((l: any) => l.animal_id === animal.id && l.log_type === type);
+    const log = getLog(animal.id, type);
     const hasData = !!log;
     
     let displayValue = '--';
     if (hasData) {
       if (type === 'WEIGHT' && log.weight_grams) {
-        displayValue = `${log.weight_grams}${log.weight_unit || animal.weight_unit || 'g'}`;
+        const g = log.weight_grams;
+        const unit = (log.weight_unit || animal.weight_unit || 'g').toLowerCase();
+        
+        if (unit === 'lbs' || unit === 'lb') {
+          const totalOz = g / 28.349523125;
+          let eighths = Math.round((totalOz - Math.floor(totalOz)) * 8);
+          let oz = Math.floor(totalOz);
+          if (eighths === 8) { eighths = 0; oz++; }
+          let lbs = Math.floor(oz / 16);
+          oz = oz % 16;
+          const eStr = eighths > 0 ? ` ${eighths}/8` : '';
+          displayValue = `${lbs}lb ${oz}oz${eStr}`;
+        } else if (unit === 'oz') {
+          const totalOz = g / 28.349523125;
+          let eighths = Math.round((totalOz - Math.floor(totalOz)) * 8);
+          let oz = Math.floor(totalOz);
+          if (eighths === 8) { eighths = 0; oz++; }
+          const eStr = eighths > 0 ? ` ${eighths}/8` : '';
+          displayValue = `${oz}oz${eStr}`;
+        } else if (unit === 'kg') {
+          displayValue = `${(g / 1000).toFixed(2)}kg`;
+        } else {
+          displayValue = `${g}g`;
+        }
       } else if (type === 'ENV') {
         if (log.temperature_c) displayValue = `${log.temperature_c}°C`;
         else if (log.basking_temp_c) displayValue = `${log.basking_temp_c}°C / ${log.cool_temp_c}°C`;
@@ -158,14 +180,16 @@ export default function DailyLog() {
         </div>
       </div>
 
-      <AddEntryModal 
-        isOpen={modalState.isOpen} 
-        onClose={() => setModalState({ ...modalState, isOpen: false })} 
-        animal={modalState.animal} 
-        initialType={modalState.type} 
-        existingLog={getLog(modalState.animal?.id, modalState.type)} 
-        viewDate={viewDate} 
-      />
+      {modalState.isOpen && modalState.animal && (
+        <AddEntryModal 
+          isOpen={modalState.isOpen} 
+          onClose={() => setModalState({ ...modalState, isOpen: false })} 
+          animal={modalState.animal} 
+          initialType={modalState.type} 
+          existingLog={getLog(modalState.animal.id, modalState.type)} 
+          viewDate={viewDate} 
+        />
+      )}
     </div>
   );
 }

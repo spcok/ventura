@@ -15,7 +15,39 @@ export default function AddEntryModal({
   const [initials, setInitials] = useState('');
   const [notes, setNotes] = useState(existingLog?.notes || '');
   
-  const [weight, setWeight] = useState(existingLog?.weight_grams ?? '');
+  const unit = (animal.weight_unit || 'g').toLowerCase();
+  const isLbs = unit === 'lbs' || unit === 'lb';
+  const isOz = unit === 'oz';
+  const isKg = unit === 'kg';
+
+  // Parse grams back to imperial fractions for editing
+  const parseExistingWeight = () => {
+    const g = existingLog?.weight_grams;
+    if (g == null) return { lbs: '', oz: '', eighths: '', standard: '' };
+    
+    if (isLbs || isOz) {
+      const totalOz = g / 28.349523125;
+      let eighths = Math.round((totalOz - Math.floor(totalOz)) * 8);
+      let oz = Math.floor(totalOz);
+      
+      if (eighths === 8) { eighths = 0; oz++; }
+      
+      if (isLbs) {
+        let lbs = Math.floor(oz / 16);
+        oz = oz % 16;
+        return { lbs: lbs.toString(), oz: oz.toString(), eighths: eighths ? eighths.toString() : '', standard: '' };
+      } else {
+        return { lbs: '', oz: oz.toString(), eighths: eighths ? eighths.toString() : '', standard: '' };
+      }
+    } else if (isKg) {
+      return { lbs: '', oz: '', eighths: '', standard: (g / 1000).toString() };
+    } else {
+      return { lbs: '', oz: '', eighths: '', standard: g.toString() };
+    }
+  };
+
+  const [weightData, setWeightData] = useState(parseExistingWeight());
+
   const [ambientTemp, setAmbientTemp] = useState(existingLog?.temperature_c ?? '');
   const [baskingTemp, setBaskingTemp] = useState(existingLog?.basking_temp_c ?? '');
   const [coolTemp, setCoolTemp] = useState(existingLog?.cool_temp_c ?? '');
@@ -27,11 +59,8 @@ export default function AddEntryModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Construct precise ISO timestamp
     const submitDate = new Date(`${viewDate}T${time}:00`).toISOString();
     
-    // Format notes with initials/mist level
     let finalNotes = notes;
     if (!existingLog) {
        if (initialType === 'MISTING') finalNotes = `Level: ${mistLevel}\n${finalNotes}`;
@@ -40,19 +69,36 @@ export default function AddEntryModal({
        finalNotes = `[${initials.toUpperCase()}] ${finalNotes}`;
     }
 
+    let finalWeightGrams: number | null = null;
+    if (initialType === 'WEIGHT') {
+      if (isLbs || isOz) {
+         if (weightData.lbs || weightData.oz || weightData.eighths) {
+            const lbs = Number(weightData.lbs || 0);
+            const oz = Number(weightData.oz || 0);
+            const eighths = Number(weightData.eighths || 0);
+            const totalOz = (isLbs ? lbs * 16 : 0) + oz + (eighths / 8);
+            finalWeightGrams = Number((totalOz * 28.349523125).toFixed(2));
+         }
+      } else {
+         if (weightData.standard !== '') {
+            const val = Number(weightData.standard);
+            finalWeightGrams = isKg ? Number((val * 1000).toFixed(2)) : val;
+         }
+      }
+    }
+
     await dailyLogService.saveLog({
       id: existingLog?.id,
       animal_id: animal.id,
       log_date: submitDate,
       log_type: initialType,
       notes: finalNotes,
-      weight_grams: weight === '' ? null : Number(weight),
+      weight_grams: finalWeightGrams,
       weight_unit: animal.weight_unit || 'g',
       temperature_c: ambientTemp === '' ? null : Number(ambientTemp),
       basking_temp_c: baskingTemp === '' ? null : Number(baskingTemp),
       cool_temp_c: coolTemp === '' ? null : Number(coolTemp),
     });
-    
     onClose();
   };
 
@@ -90,8 +136,40 @@ export default function AddEntryModal({
 
           {initialType === 'WEIGHT' && (
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Weight ({animal.weight_unit || 'g'})</label>
-              <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" autoFocus />
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Weight Data</label>
+              
+              {isLbs ? (
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input type="number" min="0" value={weightData.lbs} onChange={e => setWeightData({...weightData, lbs: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-3 pr-8 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder="lb" autoFocus />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">lb</span>
+                  </div>
+                  <div className="flex-1 relative">
+                    <input type="number" min="0" max="15" value={weightData.oz} onChange={e => setWeightData({...weightData, oz: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-3 pr-8 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder="oz" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">oz</span>
+                  </div>
+                  <div className="flex-1 relative">
+                    <input type="number" min="0" max="7" value={weightData.eighths} onChange={e => setWeightData({...weightData, eighths: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-3 pr-8 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder="1/8" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">/8</span>
+                  </div>
+                </div>
+              ) : isOz ? (
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input type="number" min="0" value={weightData.oz} onChange={e => setWeightData({...weightData, oz: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-3 pr-8 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder="oz" autoFocus />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">oz</span>
+                  </div>
+                  <div className="flex-1 relative">
+                    <input type="number" min="0" max="7" value={weightData.eighths} onChange={e => setWeightData({...weightData, eighths: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-3 pr-8 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder="1/8" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">/8</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input type="number" step="0.1" value={weightData.standard} onChange={e => setWeightData({...weightData, standard: e.target.value})} className="w-full bg-[#0A0B0E] border border-slate-800/80 rounded-xl pl-4 pr-10 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500/50" placeholder={`e.g. ${isKg ? '1.5' : '350'}`} autoFocus />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-500 uppercase tracking-widest">{unit}</span>
+                </div>
+              )}
             </div>
           )}
 
