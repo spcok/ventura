@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { UploadCloud, Image as ImageIcon, Map, X } from 'lucide-react';
 import { animalService } from '../../services/animalService';
 
-// 1. EXTRACTED HELPERS
 const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
   <div className="bg-[#0A0B0E] border border-slate-800/80 rounded-2xl p-5 shadow-inner space-y-4">
     <h3 className="font-black text-emerald-500 uppercase tracking-widest text-[10px] border-b border-slate-800/80 pb-2">{title}</h3>
@@ -10,7 +9,6 @@ const Section = ({ title, children }: { title: string, children: React.ReactNode
   </div>
 );
 
-// Added "required" prop and native HTML5 validation
 const Field = ({ label, field, type = 'text', options, formData, update, required }: any) => (
   <div className="space-y-1.5">
     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
@@ -31,54 +29,41 @@ const Field = ({ label, field, type = 'text', options, formData, update, require
   </div>
 );
 
-// 2. MAIN COMPONENT
 export function AnimalFormModal({ initialData, onClose }: { initialData?: any, onClose: () => void }) {
-  // Added strict smart defaults for new records
   const [formData, setFormData] = useState(initialData || { 
     weight_unit: 'g', 
     entity_type: 'individual',
     census_count: 1,
     red_list_status: 'NE'
   });
-  const [isCompressing, setIsCompressing] = useState(false);
+  
+  // Storage for raw File objects before upload
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [mapFile, setMapFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_DIMENSION = 800;
-          let width = img.width, height = img.height;
-          if (width > height) { if (width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } } 
-          else { if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; } }
-          canvas.width = width; canvas.height = height;
-          canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        };
-        img.onerror = reject;
-      };
-    });
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'map') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setIsCompressing(true);
-    try { setFormData({ ...formData, [field]: await compressImage(file) }); } 
-    finally { setIsCompressing(false); }
+    if (type === 'image') setImageFile(file);
+    if (type === 'map') setMapFile(file);
   };
 
   const update = (field: string, value: any) => setFormData((prev: any) => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await animalService.saveAnimal(formData);
-    onClose();
+    setIsUploading(true);
+    try {
+      await animalService.saveAnimal(formData, imageFile || undefined, mapFile || undefined);
+      onClose();
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  const imagePreview = imageFile ? URL.createObjectURL(imageFile) : formData.image_url;
+  const mapPreview = mapFile ? URL.createObjectURL(mapFile) : formData.distribution_map_url;
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
@@ -92,18 +77,32 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><ImageIcon size={14} /> Profile Photo</label>
-              {formData.image_url ? (
-                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group"><img src={formData.image_url} alt="Profile" className="w-full h-full object-cover" /><button type="button" onClick={() => update('image_url', null)} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button></div>
+              {imagePreview ? (
+                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group">
+                  <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => { setImageFile(null); update('image_url', null); }} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button>
+                </div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-emerald-500/50"><UploadCloud size={24} className="text-slate-600 mb-2" /><span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Photo'}</span><input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'image_url')} disabled={isCompressing} /></label>
+                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-emerald-500/50">
+                  <UploadCloud size={24} className="text-slate-600 mb-2" />
+                  <span className="text-xs font-bold text-slate-500">Upload Photo</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, 'image')} />
+                </label>
               )}
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Map size={14} /> Distribution Map</label>
-              {formData.distribution_map_url ? (
-                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group"><img src={formData.distribution_map_url} alt="Map" className="w-full h-full object-cover" /><button type="button" onClick={() => update('distribution_map_url', null)} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button></div>
+              {mapPreview ? (
+                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-800/80 group">
+                  <img src={mapPreview} alt="Map" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => { setMapFile(null); update('distribution_map_url', null); }} className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-rose-500 text-white rounded-lg"><X size={16} /></button>
+                </div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-blue-500/50"><UploadCloud size={24} className="text-slate-600 mb-2" /><span className="text-xs font-bold text-slate-500">{isCompressing ? 'Compressing...' : 'Upload Map'}</span><input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'distribution_map_url')} disabled={isCompressing} /></label>
+                <label className="flex flex-col items-center justify-center w-full h-48 bg-[#0A0B0E] border-2 border-dashed border-slate-800/80 rounded-2xl cursor-pointer hover:border-blue-500/50">
+                  <UploadCloud size={24} className="text-slate-600 mb-2" />
+                  <span className="text-xs font-bold text-slate-500">Upload Map</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, 'map')} />
+                </label>
               )}
             </div>
           </div>
@@ -186,8 +185,8 @@ export function AnimalFormModal({ initialData, onClose }: { initialData?: any, o
 
         </form>
         <div className="p-5 border-t border-slate-800/80 bg-[#0F1117]/90 backdrop-blur shrink-0 flex justify-end z-20">
-          <button type="submit" form="animal-form" className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-            {initialData ? 'Save Changes' : 'Register Animal'}
+          <button type="submit" form="animal-form" disabled={isUploading} className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+            {isUploading ? 'Syncing...' : (initialData ? 'Save Changes' : 'Register Animal')}
           </button>
         </div>
       </div>

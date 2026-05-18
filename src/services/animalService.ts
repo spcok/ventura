@@ -1,11 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { queryClient } from '../lib/db';
 import { useOutboxStore } from '../store/outboxStore';
+import { AnimalSchema, Animal } from '../types/schema';
 
 const generateUUID = () => crypto.randomUUID();
 
 export const animalService = {
-  saveAnimal: async (data: any) => {
+  saveAnimal: async (data: Partial<Animal>, imageFile?: File, mapFile?: File) => {
     // 1. Sanitize Payload: Convert empty strings to null
     const sanitizedData = Object.fromEntries(
       Object.entries(data).map(([key, value]) => [
@@ -15,12 +16,40 @@ export const animalService = {
     );
 
     const isNew = !sanitizedData.id;
+    const recordId = sanitizedData.id || generateUUID();
+
+    // 2. Storage Interceptor (Direct Bucket Upload)
+    if (imageFile) {
+      const ext = imageFile.name.split('.').pop();
+      const fileName = `${recordId}-profile-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('animals').upload(fileName, imageFile, { upsert: true });
+      
+      if (uploadError) {
+        console.warn('Profile image upload failed:', uploadError);
+      } else {
+        const { data: urlData } = supabase.storage.from('animals').getPublicUrl(fileName);
+        sanitizedData.image_url = urlData.publicUrl;
+      }
+    }
+
+    if (mapFile) {
+      const ext = mapFile.name.split('.').pop();
+      const fileName = `${recordId}-map-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('animals').upload(fileName, mapFile, { upsert: true });
+      
+      if (uploadError) {
+        console.warn('Map image upload failed:', uploadError);
+      } else {
+        const { data: urlData } = supabase.storage.from('animals').getPublicUrl(fileName);
+        sanitizedData.distribution_map_url = urlData.publicUrl;
+      }
+    }
     
-    // 2. Iron-Clad Schema Enforcement (Guarantee NO NULL values hit Postgres for strict columns)
-    const payload = {
+    // 3. Iron-Clad Schema Mapping
+    const rawPayload = {
       ...sanitizedData,
-      id: sanitizedData.id || generateUUID(),
-      display_order: sanitizedData.display_order ?? 999, // Background integer
+      id: recordId,
+      display_order: sanitizedData.display_order ?? 999,
       census_count: sanitizedData.census_count ?? 1,
       entity_type: sanitizedData.entity_type || 'individual',
       weight_unit: sanitizedData.weight_unit || 'g',
@@ -35,17 +64,19 @@ export const animalService = {
       archived: !!sanitizedData.archived,
       is_deleted: false,
       updated_at: new Date().toISOString(),
+      ...(isNew ? { created_at: new Date().toISOString() } : {})
     };
 
-    if (isNew) payload.created_at = new Date().toISOString();
+    // 4. The ZOD Shield: Will throw a hard error here if anything violates the database rules
+    const payload = AnimalSchema.parse(rawPayload);
 
-    // 3. Optimistic UI Update (Inject into RAM)
-    queryClient.setQueryData(['animals'], (old: any[] | undefined) => {
+    // 5. Optimistic UI Update (Inject into RAM)
+    queryClient.setQueryData(['animals'], (old: Animal[] | undefined) => {
       if (!old) return [payload];
       return isNew ? [...old, payload] : old.map(a => a.id === payload.id ? payload : a);
     });
 
-    // 4. The Cloud Strike
+    // 6. The Cloud Strike
     try {
       const { error } = await supabase.from('animals').upsert(payload);
       if (error) {
